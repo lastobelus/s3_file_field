@@ -41,6 +41,10 @@ jQuery.fn.S3FileField = (options) ->
 
   finalFormData = {}
 
+  makeKey = (key, unique_id, file) ->
+    filename = to_s3_filename(file.name)
+    key.replace('{timestamp}', new Date().getTime()).replace('{unique_id}', unique_id).replace('${filename}', filename)
+
   settings =
     # File input name must be "file"
     paramName: 'file'
@@ -72,7 +76,7 @@ jQuery.fn.S3FileField = (options) ->
     formData: (form) ->
       unique_id = @files[0].unique_id
       finalFormData[unique_id] =
-        key: $this.data('key').replace('{timestamp}', new Date().getTime()).replace('{unique_id}', unique_id)
+        key: makeKey($this.data("key"), unique_id, @files[0])
         'Content-Type': @files[0].type
         acl: $this.data('acl')
         'AWSAccessKeyId': $this.data('aws-access-key-id')
@@ -85,14 +89,18 @@ jQuery.fn.S3FileField = (options) ->
 
   jQuery.extend settings, options
 
+  # to_s3_filename = (filename) ->
+  #   trimmed = filename.replace(/^\s+|\s+$/g,'')
+  #   strip_before_slash = trimmed.split('\\').slice(-1)[0]
+  #   double_encode_quote = strip_before_slash.replace('"', '%22')
+  #   encodeURIComponent(double_encode_quote)
+
   to_s3_filename = (filename) ->
-    trimmed = filename.replace(/^\s+|\s+$/g,'')
-    strip_before_slash = trimmed.split('\\').slice(-1)[0]
-    double_encode_quote = strip_before_slash.replace('"', '%22')
-    encodeURIComponent(double_encode_quote)
+    sanitized = filename.replace(/[^a-zA-Z0-9\.\-]/g, '-')
+    sanitized = sanitized.replace(/-+/g, '-').replace(/^-|-$/g, '')
+    sanitized.replace("-.", '.')
 
   build_content_object = (file, result) ->
-
     content = {}
 
     if result # Use the S3 response to set the URL to avoid character encodings bugs
@@ -103,7 +111,7 @@ jQuery.fn.S3FileField = (options) ->
       content.filepath   = finalFormData[file.unique_id]['key'].replace('/${filename}', '')
       content.url        = domain + '/' + content.filepath + '/' + to_s3_filename(file.name)
 
-    content.filename   = file.name
+    content.filename   = to_s3_filename(file.name)
     content.filesize   = file.size if 'size' of file
     content.filetype   = file.type if 'type' of file
     content.unique_id  = file.unique_id if 'unique_id' of file
